@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Dmitry Antonyuk's blog]]></title>
+  <link href="http://lomeo.github.io/lomeo,/atom.xml" rel="self"/>
+  <link href="http://lomeo.github.io/lomeo,/"/>
+  <updated>2016-11-25T20:32:48+03:00</updated>
+  <id>http://lomeo.github.io/lomeo,/</id>
+  <author>
+    <name><![CDATA[Dmitry Antonyuk]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Hello!]]></title>
+    <link href="http://lomeo.github.io/lomeo,/blog/2016/11/25/hello/"/>
+    <updated>2016-11-25T20:05:08+03:00</updated>
+    <id>http://lomeo.github.io/lomeo,/blog/2016/11/25/hello</id>
+    <content type="html"><![CDATA[<p>This is a first post. Just to check up Octopress engine.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">object</span> <span class="nc">Lomeo</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="n">salute</span><span class="o">(</span><span class="n">friend</span><span class="k">:</span> <span class="kt">Friend</span><span class="o">)</span> <span class="o">{</span>
+</span><span class='line'>        <span class="n">sayTo</span><span class="o">(</span><span class="n">friend</span><span class="o">,</span> <span class="s">&quot;Hey!&quot;</span><span class="o">)</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+]]></content>
+  </entry>
+  
+</feed>
