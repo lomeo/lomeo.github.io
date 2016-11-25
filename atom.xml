@@ -2,10 +2,10 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
 
   <title><![CDATA[Dmitry Antonyuk's blog]]></title>
-  <link href="http://lomeo.github.io/lomeo,/atom.xml" rel="self"/>
-  <link href="http://lomeo.github.io/lomeo,/"/>
-  <updated>2016-11-25T20:38:03+03:00</updated>
-  <id>http://lomeo.github.io/lomeo,/</id>
+  <link href="http://lomeo.github.io/lomeo/atom.xml" rel="self"/>
+  <link href="http://lomeo.github.io/lomeo/"/>
+  <updated>2016-11-25T20:40:36+03:00</updated>
+  <id>http://lomeo.github.io/lomeo/</id>
   <author>
     <name><![CDATA[Dmitry Antonyuk]]></name>
     
@@ -15,9 +15,9 @@
   
   <entry>
     <title type="html"><![CDATA[Hello!]]></title>
-    <link href="http://lomeo.github.io/lomeo,/blog/2016/11/25/hello/"/>
+    <link href="http://lomeo.github.io/lomeo/blog/2016/11/25/hello/"/>
     <updated>2016-11-25T20:05:08+03:00</updated>
-    <id>http://lomeo.github.io/lomeo,/blog/2016/11/25/hello</id>
+    <id>http://lomeo.github.io/lomeo/blog/2016/11/25/hello</id>
     <content type="html"><![CDATA[<p>This is a first post. Just to check up Octopress engine.</p>
 
 <figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
