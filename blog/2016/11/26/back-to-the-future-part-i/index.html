@@ -95,7 +95,7 @@ well-known Future over Option type.</p>
 
 <p>The Future is just an asynchronous computation which will return the result…
 eh… in future. But we already can use future combinators to work with this
-result as it is already obtained.</p>
+result as if it is already obtained.</p>
 
 <p>The Option is much much simpler. It can be thought as a computation which can
 return no result (frankly, not computation but value, but this difference does
@@ -109,7 +109,7 @@ of this file, we should return a future which reads these settings or return no
 future ‘cause there is nothing to read. Ok, we can encode such a type as
 <code>Option[Future[T]]</code> type and this is not the type I will discuss here. Another
 situation we could have is a future which can return no value. E.g. retrieving
-some record from a database by it’s id. This record can exists or not.
+some record from a database by it’s id. This record can exist or not.
 Regarding this we can obtain the record or not. And the type for such
 computation is <code>Future[Option[T]]</code>. See the difference?</p>
 
@@ -157,7 +157,7 @@ could we do with this?</p>
 <h2>Implicits</h2>
 
 <p>The first solution coming in mind is to use implicits parameterized by record
-type. As a result we get additional methods for all Future[Option[T]]
+type. As a result we get additional methods for all <code>Future[Option[T]]</code>
 instances. Let’s give it a try:</p>
 
 <figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
@@ -272,12 +272,14 @@ with more generic one:</p>
 
 <p>This is a monad transformer. We can use Option inside any other monad. But
 unfortunately this code fails for sure at least &lsquo;cause the compiler does not
-aware of <code>value's</code> methods <code>map</code> or <code>flatMap</code>.</p>
+aware of <code>value's</code> methods <code>map</code> or <code>flatMap</code>. It is just some type <code>F[A]</code>,
+nothing more, right?</p>
 
-<p>Here type classes come for the rescue. A little explanation how they work. We
-define a special trait with methods <code>map</code> or <code>flatMap</code>, these methods accept
-some value with generic type as argument, so concrete implementations of the
-trait will aware of how to handle concrete type. See example:</p>
+<p>This is the place where type classes come for the rescue. A little explanation
+how they work. We define a special trait with methods <code>map</code> or <code>flatMap</code>, these
+methods accept some value with generic type as argument, so concrete
+implementations of the trait will aware of how to handle concrete types. See
+example:</p>
 
 <figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
 <span class='line-number'>2</span>
@@ -324,6 +326,8 @@ trait will aware of how to handle concrete type. See example:</p>
 </span><span class='line'><span class="o">}</span>
 </span></code></pre></td></tr></table></div></figure>
 
+
+<p>Focus on calls, now monad calls <code>map</code> and <code>flatMap</code> not value itself.</p>
 
 <p>What about our functions <code>getOrElse</code> and <code>orElse</code>? Quite simple:</p>
 
