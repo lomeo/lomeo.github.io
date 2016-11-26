@@ -9,14 +9,8 @@
   <meta name="author" content="Dmitry Antonyuk">
 
   
-  <meta name="description" content="This is a first post. Just to check up Octopress engine. 1
-2
-3
-4
-5
-6
-object Lomeo { def salute(friend: Friend) { sayTo(friend, &quot;Hey!&quot;) }
-} ">
+  <meta name="description" content="I&rsquo;m going to write a series of posts on asynchronous computation that can
+return no-result and how we deal with it in Scala. Don’t worry, it is &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -78,6 +72,316 @@ object Lomeo { def salute(friend: Friend) { sayTo(friend, &quot;Hey!&quot;) }
       
   <header>
     
+      <h1 class="entry-title"><a href="/blog/2016/11/26/back-to-the-future-part-i/">Back to the Future. Part I</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2016-11-26T10:43:10+03:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>26</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>10:43 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>I&rsquo;m going to write a series of posts on asynchronous computation that can
+return no-result and how we deal with it in Scala. Don’t worry, it is just a
+well-known Future over Option type.</p>
+
+<h2>Intuition</h2>
+
+<p>Recall what Future and Option are about.</p>
+
+<p>The Future is just an asynchronous computation which will return the result…
+eh… in future. But we already can use future combinators to work with this
+result as it is already obtained.</p>
+
+<p>The Option is much much simpler. It can be thought as a computation which can
+return no result (frankly, not computation but value, but this difference does
+not matter here). And yes, there are a lot of option combinators helping us to
+work with wrapped value.</p>
+
+<p>Future and Option can be combined in two different ways. The first one is about
+the situation we need some future, but don’t sure if we may get it. E.g. we
+have or haven’t some settings in config file, and depending on the availability
+of this file, we should return a future which reads these settings or return no
+future ‘cause there is nothing to read. Ok, we can encode such a type as
+<code>Option[Future[T]]</code> type and this is not the type I will discuss here. Another
+situation we could have is a future which can return no value. E.g. retrieving
+some record from a database by it’s id. This record can exists or not.
+Regarding this we can obtain the record or not. And the type for such
+computation is <code>Future[Option[T]]</code>. See the difference?</p>
+
+<h2>The Problem</h2>
+
+<p>Well, let’s assume we need to find a record by it’s id and return it or, in the
+event of absence, create a new one. The database API is reactive, all functions
+return results in Future. There is already defined function <code>getPerson</code> which
+return a person wrapped with Some if it exists or None if it doesn&rsquo;t. Let&rsquo;s
+implement it as a function to see what types are used here:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">def</span> <span class="n">getPerson</span><span class="o">(</span><span class="n">id</span><span class="k">:</span> <span class="kt">Int</span><span class="o">)</span><span class="k">:</span> <span class="kt">Future</span><span class="o">[</span><span class="kt">Option</span><span class="o">[</span><span class="kt">Person</span><span class="o">]]</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">def</span> <span class="n">getOrCreate</span><span class="o">(</span><span class="n">id</span><span class="k">:</span> <span class="kt">Int</span><span class="o">,</span> <span class="n">person</span><span class="k">:</span> <span class="o">=&gt;</span> <span class="nc">Person</span><span class="o">)</span><span class="k">:</span> <span class="kt">Future</span><span class="o">[</span><span class="kt">Person</span><span class="o">]</span> <span class="k">=</span>
+</span><span class='line'>  <span class="n">getPerson</span><span class="o">(</span><span class="n">id</span><span class="o">).</span><span class="n">map</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">getOrElse</span><span class="o">(</span><span class="n">person</span><span class="o">))</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Sometimes there are different strategies to create a record, so we are
+rewriting this to something like</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">def</span> <span class="n">getOr</span><span class="o">(</span><span class="n">id</span><span class="k">:</span> <span class="kt">Int</span><span class="o">,</span> <span class="n">builder</span><span class="k">:</span> <span class="o">=&gt;</span> <span class="nc">Future</span><span class="o">[</span><span class="kt">Person</span><span class="o">])</span><span class="k">:</span> <span class="kt">Future</span><span class="o">[</span><span class="kt">Person</span><span class="o">]</span> <span class="k">=</span> <span class="o">{</span>
+</span><span class='line'>  <span class="n">getPerson</span><span class="o">(</span><span class="n">id</span><span class="o">).</span><span class="n">flatMap</span> <span class="o">{</span>
+</span><span class='line'>    <span class="k">case</span> <span class="nc">None</span> <span class="k">=&gt;</span> <span class="n">builder</span>
+</span><span class='line'>    <span class="k">case</span> <span class="nc">Some</span><span class="o">(</span><span class="n">person</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">Future</span><span class="o">(</span><span class="n">person</span><span class="o">)</span>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The code is pretty easy and neat, but later we need to do same things with
+other tables/types and we write the boilerplate code over and over again. What
+could we do with this?</p>
+
+<h2>Implicits</h2>
+
+<p>The first solution coming in mind is to use implicits parameterized by record
+type. As a result we get additional methods for all Future[Option[T]]
+instances. Let’s give it a try:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">implicit</span> <span class="k">class</span> <span class="nc">FutureOption</span><span class="o">[</span><span class="kt">T</span><span class="o">](</span><span class="n">future</span><span class="k">:</span> <span class="kt">Future</span><span class="o">[</span><span class="kt">Option</span><span class="o">[</span><span class="kt">T</span><span class="o">]])</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">def</span> <span class="n">getOrElse</span><span class="o">(</span><span class="n">default</span><span class="k">:</span> <span class="o">=&gt;</span> <span class="n">T</span><span class="o">)</span><span class="k">:</span> <span class="kt">Future</span><span class="o">[</span><span class="kt">T</span><span class="o">]</span> <span class="k">=</span>
+</span><span class='line'>    <span class="n">future</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">getOrElse</span><span class="o">(</span><span class="n">default</span><span class="o">))</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">def</span> <span class="n">orElse</span><span class="o">(</span><span class="n">default</span><span class="k">:</span> <span class="o">=&gt;</span> <span class="nc">Future</span><span class="o">[</span><span class="kt">T</span><span class="o">])</span><span class="k">:</span> <span class="kt">Future</span><span class="o">[</span><span class="kt">T</span><span class="o">]</span> <span class="k">=</span>
+</span><span class='line'>    <span class="n">future</span> <span class="n">flatMap</span> <span class="o">{</span>
+</span><span class='line'>      <span class="k">case</span> <span class="nc">Some</span><span class="o">(</span><span class="n">x</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="nc">Future</span><span class="o">.</span><span class="n">successful</span><span class="o">(</span><span class="n">x</span><span class="o">)</span>
+</span><span class='line'>      <span class="k">case</span> <span class="nc">None</span> <span class="k">=&gt;</span> <span class="n">default</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="c1">// or, if you prefer combinator style</span>
+</span><span class='line'>  <span class="c1">// def orElse(default: =&gt; Future[T]): Future[T] =</span>
+</span><span class='line'>  <span class="c1">//   future.flatMap(_.fold(default)(Future.successful))</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>And it actually works. We don’t need <code>getOrCreate</code> or <code>getOr</code> functions
+anymore.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="n">getPerson</span><span class="o">(</span><span class="n">id</span><span class="o">).</span><span class="n">getOrElse</span><span class="o">(</span><span class="n">newPerson</span><span class="o">)</span>
+</span><span class='line'><span class="n">getPerson</span><span class="o">(</span><span class="n">id</span><span class="o">).</span><span class="n">orElse</span><span class="o">(</span><span class="n">buildPerson</span><span class="o">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Monad Transformers</h2>
+
+<p>Ok, no problems here. But could we go a little deeper?</p>
+
+<p>First of all, let&rsquo;s stop and look what we have here. <code>Future[Option[T]]</code> type
+combines two types together. Types like <code>Future</code> or <code>Option</code> are monadic types.
+I don&rsquo;t want to discuss what monad is and what it isn&rsquo;t. Consider it like a
+regular type having methods <code>flatMap</code> and <code>pure</code>. The first method is
+well-known among scala programmers, so I skip the details. The second method is
+just a constructor with one argument. For example, it is <code>Some</code> for <code>Option</code>
+and <code>Future.successful</code> for <code>Future</code>. Wrap the value, nothing more.</p>
+
+<p>Ok, so far so good. When we need to work with Future, we use top level calls,
+when we need to work with Option, we lift it using <code>map</code> or <code>flatMap</code>. See
+example:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="c1">// map Future value</span>
+</span><span class='line'><span class="n">future</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">f</span><span class="o">)</span> <span class="c1">// f has type Option[A] =&gt; B</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// map Option value</span>
+</span><span class='line'><span class="n">future</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">f</span><span class="o">))</span> <span class="c1">// f has type A =&gt; B</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Exactly as we did before in <code>getOrElse</code> and <code>orElse</code> methods. And this is a
+place for generalization. See, everything we need from <code>Future</code> is
+<code>Future.successful</code> (or <code>pure</code>) and <code>flatMap</code>. We used <code>map</code> as well, but it is
+quite easy to implement it in terms of <code>flatMap</code> and <code>pure</code>:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">def</span> <span class="n">map</span><span class="o">[</span><span class="kt">B</span><span class="o">](</span><span class="n">f</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="n">B</span><span class="o">)</span><span class="k">:</span> <span class="kt">F</span><span class="o">[</span><span class="kt">A</span><span class="o">]</span> <span class="k">=</span>
+</span><span class='line'>    <span class="k">this</span><span class="o">.</span><span class="n">flatMap</span><span class="o">(</span><span class="n">x</span> <span class="k">=&gt;</span> <span class="n">implicitly</span><span class="o">[</span><span class="kt">Monad</span><span class="o">[</span><span class="kt">F</span><span class="o">]].</span><span class="n">pure</span><span class="o">(</span><span class="n">f</span><span class="o">(</span><span class="n">x</span><span class="o">)))</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We say: &ldquo;Monad is a Functor&rdquo;. But who cares? :)</p>
+
+<p>In fact, we may implement functions <code>getOrElse</code> and <code>orElse</code> for any monadic
+type. As generic programmers we have to generalize these functions to support
+all possible types. To get this we need to replace <code>Future[Option[T]]</code> type
+with more generic one:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">class</span> <span class="nc">OptionT</span><span class="o">[</span><span class="kt">F</span><span class="o">[</span><span class="k">_</span><span class="o">]</span>, <span class="kt">A</span><span class="o">](</span><span class="k">val</span> <span class="n">value</span><span class="k">:</span> <span class="kt">F</span><span class="o">[</span><span class="kt">Option</span><span class="o">[</span><span class="kt">A</span><span class="o">]])</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">def</span> <span class="n">map</span><span class="o">[</span><span class="kt">B</span><span class="o">](</span><span class="n">f</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="n">B</span><span class="o">)</span><span class="k">:</span> <span class="kt">OptionT</span><span class="o">[</span><span class="kt">F</span>, <span class="kt">B</span><span class="o">]</span> <span class="k">=</span>
+</span><span class='line'>    <span class="k">new</span> <span class="nc">OptionT</span><span class="o">(</span><span class="n">value</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">f</span><span class="o">)))</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">def</span> <span class="n">flatMap</span><span class="o">[</span><span class="kt">B</span><span class="o">](</span><span class="n">f</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="nc">OptionT</span><span class="o">[</span><span class="kt">F</span>, <span class="kt">B</span><span class="o">])</span><span class="k">:</span> <span class="kt">OptionT</span><span class="o">[</span><span class="kt">F</span>, <span class="kt">B</span><span class="o">]</span> <span class="k">=</span>
+</span><span class='line'>    <span class="k">new</span> <span class="nc">OptionT</span><span class="o">(</span><span class="n">value</span><span class="o">.</span><span class="n">flatMap</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">fold</span><span class="o">(</span><span class="n">F</span><span class="o">.</span><span class="n">pure</span><span class="o">(</span><span class="nc">Option</span><span class="o">.</span><span class="n">empty</span><span class="o">[</span><span class="kt">B</span><span class="o">]))(</span><span class="n">x</span> <span class="k">=&gt;</span> <span class="n">f</span><span class="o">(</span><span class="n">x</span><span class="o">).</span><span class="n">value</span><span class="o">)))</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This is a monad transformer. We can use Option inside any other monad. But
+unfortunately this code fails for sure at least &lsquo;cause the compiler does not
+aware of <code>value's</code> methods <code>map</code> or <code>flatMap</code>.</p>
+
+<p>Here type classes come for the rescue. A little explanation how they work. We
+define a special trait with methods <code>map</code> or <code>flatMap</code>, these methods accept
+some value with generic type as argument, so concrete implementations of the
+trait will aware of how to handle concrete type. See example:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">trait</span> <span class="nc">Monad</span><span class="o">[</span><span class="kt">F</span><span class="o">[</span><span class="k">_</span><span class="o">]]</span> <span class="o">{</span>
+</span><span class='line'>  <span class="k">def</span> <span class="n">pure</span><span class="o">[</span><span class="kt">A</span><span class="o">](</span><span class="n">x</span><span class="k">:</span> <span class="kt">A</span><span class="o">)</span><span class="k">:</span> <span class="kt">F</span><span class="o">[</span><span class="kt">A</span><span class="o">]</span>
+</span><span class='line'>  <span class="k">def</span> <span class="n">map</span><span class="o">[</span><span class="kt">A</span>, <span class="kt">B</span><span class="o">](</span><span class="n">m</span><span class="k">:</span> <span class="kt">F</span><span class="o">[</span><span class="kt">A</span><span class="o">])(</span><span class="n">f</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="n">B</span><span class="o">)</span><span class="k">:</span> <span class="kt">F</span><span class="o">[</span><span class="kt">B</span><span class="o">]</span>
+</span><span class='line'>  <span class="k">def</span> <span class="n">flatMap</span><span class="o">[</span><span class="kt">A</span>, <span class="kt">B</span><span class="o">](</span><span class="n">m</span><span class="k">:</span> <span class="kt">F</span><span class="o">[</span><span class="kt">A</span><span class="o">])(</span><span class="n">f</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="n">F</span><span class="o">[</span><span class="kt">B</span><span class="o">])</span><span class="k">:</span> <span class="kt">F</span><span class="o">[</span><span class="kt">B</span><span class="o">]</span>
+</span><span class='line'><span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">implicit</span> <span class="k">val</span> <span class="n">futureMonad</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">Monad</span><span class="o">[</span><span class="kt">Future</span><span class="o">]</span> <span class="o">{</span>
+</span><span class='line'>  <span class="k">def</span> <span class="n">pure</span><span class="o">[</span><span class="kt">A</span><span class="o">](</span><span class="n">x</span><span class="k">:</span> <span class="kt">A</span><span class="o">)</span><span class="k">:</span> <span class="kt">Future</span><span class="o">[</span><span class="kt">A</span><span class="o">]</span> <span class="k">=</span> <span class="nc">Future</span><span class="o">.</span><span class="n">successful</span><span class="o">(</span><span class="n">x</span><span class="o">)</span>
+</span><span class='line'>  <span class="k">def</span> <span class="n">map</span><span class="o">[</span><span class="kt">A</span>, <span class="kt">B</span><span class="o">](</span><span class="n">m</span><span class="k">:</span> <span class="kt">Future</span><span class="o">[</span><span class="kt">A</span><span class="o">])(</span><span class="n">f</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="n">B</span><span class="o">)</span><span class="k">:</span> <span class="kt">Future</span><span class="o">[</span><span class="kt">B</span><span class="o">]</span> <span class="k">=</span> <span class="n">m</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">f</span><span class="o">)</span>
+</span><span class='line'>  <span class="k">def</span> <span class="n">flatMap</span><span class="o">[</span><span class="kt">A</span>, <span class="kt">B</span><span class="o">](</span><span class="n">m</span><span class="k">:</span> <span class="kt">Future</span><span class="o">[</span><span class="kt">A</span><span class="o">])(</span><span class="n">f</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="nc">Future</span><span class="o">[</span><span class="kt">B</span><span class="o">])</span><span class="k">:</span> <span class="kt">Future</span><span class="o">[</span><span class="kt">B</span><span class="o">]</span> <span class="k">=</span> <span class="n">m</span><span class="o">.</span><span class="n">flatMap</span><span class="o">(</span><span class="n">f</span><span class="o">)</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we can use this monad implicitly to create generic OptionT</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">case</span> <span class="k">class</span> <span class="nc">OptionT</span><span class="o">[</span><span class="kt">F</span><span class="o">[</span><span class="k">_</span><span class="o">]</span>, <span class="kt">A</span><span class="o">](</span><span class="n">value</span><span class="k">:</span> <span class="kt">F</span><span class="o">[</span><span class="kt">Option</span><span class="o">[</span><span class="kt">A</span><span class="o">]])</span> <span class="o">{</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">def</span> <span class="n">map</span><span class="o">[</span><span class="kt">B</span><span class="o">](</span><span class="n">f</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="n">B</span><span class="o">)(</span><span class="k">implicit</span> <span class="n">m</span><span class="k">:</span> <span class="kt">Monad</span><span class="o">[</span><span class="kt">F</span><span class="o">])</span><span class="k">:</span> <span class="kt">OptionT</span><span class="o">[</span><span class="kt">F</span>, <span class="kt">B</span><span class="o">]</span> <span class="k">=</span>
+</span><span class='line'>    <span class="nc">OptionT</span><span class="o">(</span><span class="n">m</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">value</span><span class="o">)(</span><span class="k">_</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">f</span><span class="o">)))</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">def</span> <span class="n">flatMap</span><span class="o">[</span><span class="kt">B</span><span class="o">](</span><span class="n">f</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="nc">OptionT</span><span class="o">[</span><span class="kt">F</span>, <span class="kt">B</span><span class="o">])(</span><span class="k">implicit</span> <span class="n">m</span><span class="k">:</span> <span class="kt">Monad</span><span class="o">[</span><span class="kt">F</span><span class="o">])</span><span class="k">:</span> <span class="kt">OptionT</span><span class="o">[</span><span class="kt">F</span>, <span class="kt">B</span><span class="o">]</span> <span class="k">=</span>
+</span><span class='line'>    <span class="nc">OptionT</span><span class="o">(</span><span class="n">m</span><span class="o">.</span><span class="n">flatMap</span><span class="o">(</span><span class="n">value</span><span class="o">)(</span><span class="k">_</span><span class="o">.</span><span class="n">fold</span><span class="o">(</span><span class="n">m</span><span class="o">.</span><span class="n">pure</span><span class="o">(</span><span class="nc">Option</span><span class="o">.</span><span class="n">empty</span><span class="o">[</span><span class="kt">B</span><span class="o">]))(</span><span class="n">x</span> <span class="k">=&gt;</span> <span class="n">f</span><span class="o">(</span><span class="n">x</span><span class="o">).</span><span class="n">value</span><span class="o">)))</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>What about our functions <code>getOrElse</code> and <code>orElse</code>? Quite simple:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">class</span> <span class="nc">OptionT</span><span class="o">[</span><span class="kt">F</span><span class="o">[</span><span class="k">_</span><span class="o">]</span>, <span class="kt">A</span><span class="o">](</span><span class="k">val</span> <span class="n">value</span><span class="k">:</span> <span class="kt">F</span><span class="o">[</span><span class="kt">Option</span><span class="o">[</span><span class="kt">A</span><span class="o">]])</span> <span class="o">{</span>
+</span><span class='line'>  <span class="o">...</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">def</span> <span class="n">getOrElse</span><span class="o">(</span><span class="n">default</span><span class="k">:</span> <span class="o">=&gt;</span> <span class="n">A</span><span class="o">)(</span><span class="k">implicit</span> <span class="n">m</span><span class="k">:</span> <span class="kt">Monad</span><span class="o">[</span><span class="kt">F</span><span class="o">])</span><span class="k">:</span> <span class="kt">F</span><span class="o">[</span><span class="kt">A</span><span class="o">]</span> <span class="k">=</span>
+</span><span class='line'>    <span class="n">m</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">value</span><span class="o">)(</span><span class="k">_</span><span class="o">.</span><span class="n">getOrElse</span><span class="o">(</span><span class="n">default</span><span class="o">))</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">def</span> <span class="n">orElse</span><span class="o">(</span><span class="n">default</span><span class="k">:</span> <span class="o">=&gt;</span> <span class="n">F</span><span class="o">[</span><span class="kt">A</span><span class="o">])(</span><span class="k">implicit</span> <span class="n">m</span><span class="k">:</span> <span class="kt">Monad</span><span class="o">[</span><span class="kt">F</span><span class="o">])</span><span class="k">:</span> <span class="kt">F</span><span class="o">[</span><span class="kt">A</span><span class="o">]</span> <span class="k">=</span>
+</span><span class='line'>    <span class="n">m</span><span class="o">.</span><span class="n">flatMap</span><span class="o">(</span><span class="n">value</span><span class="o">)(</span><span class="k">_</span><span class="o">.</span><span class="n">fold</span><span class="o">(</span><span class="n">default</span><span class="o">)(</span><span class="n">m</span><span class="o">.</span><span class="n">pure</span><span class="o">))</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Client code looks like:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="nc">OptionT</span><span class="o">(</span><span class="n">getPerson</span><span class="o">(</span><span class="n">id</span><span class="o">)).</span><span class="n">getOrElse</span><span class="o">(</span><span class="n">newPerson</span><span class="o">)</span>
+</span><span class='line'><span class="nc">OptionT</span><span class="o">(</span><span class="n">getPerson</span><span class="o">(</span><span class="n">id</span><span class="o">)).</span><span class="n">orElse</span><span class="o">(</span><span class="n">buildPerson</span><span class="o">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We might use implicits here to convert <code>Future[Option[T]]</code> to
+<code>OptionT[Future, T]</code> implicitly, but we won&rsquo;t.</p>
+
+<h2>Meet Cats</h2>
+
+<p>This section is the shortest one. <a href="http://typelevel.org/cats/">The cats library</a>
+already provides <a href="http://typelevel.org/cats/datatypes/optiont.html">OptionT</a>.
+So it is suffice to import <code>cats.data</code> to use <code>OptionT</code>.</p>
+
+<p><a href="https://github.com/lomeo/futures-examples/">code examples</a></p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
       <h1 class="entry-title"><a href="/blog/2016/11/25/hello/">Hello!</a></h1>
     
     
@@ -128,6 +432,10 @@ object Lomeo { def salute(friend: Friend) { sayTo(friend, &quot;Hey!&quot;) }
     <section>
   <h1>Recent Posts</h1>
   <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2016/11/26/back-to-the-future-part-i/">Back to the Future. Part I</a>
+      </li>
     
       <li class="post">
         <a href="/blog/2016/11/25/hello/">Hello!</a>

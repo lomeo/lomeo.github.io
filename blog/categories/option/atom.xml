@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Option | Dmitry Antonyuk's blog]]></title>
+  <link href="http://lomeo.github.io//blog/categories/option/atom.xml" rel="self"/>
+  <link href="http://lomeo.github.io//"/>
+  <updated>2016-11-27T01:50:58+03:00</updated>
+  <id>http://lomeo.github.io//</id>
+  <author>
+    <name><![CDATA[Dmitry Antonyuk]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Back to the Future. Part I]]></title>
+    <link href="http://lomeo.github.io//blog/2016/11/26/back-to-the-future-part-i/"/>
+    <updated>2016-11-26T10:43:10+03:00</updated>
+    <id>http://lomeo.github.io//blog/2016/11/26/back-to-the-future-part-i</id>
+    <content type="html"><![CDATA[<p>I&rsquo;m going to write a series of posts on asynchronous computation that can
+return no-result and how we deal with it in Scala. Don’t worry, it is just a
+well-known Future over Option type.</p>
+
+<h2>Intuition</h2>
+
+<p>Recall what Future and Option are about.</p>
+
+<p>The Future is just an asynchronous computation which will return the result…
+eh… in future. But we already can use future combinators to work with this
+result as it is already obtained.</p>
+
+<p>The Option is much much simpler. It can be thought as a computation which can
+return no result (frankly, not computation but value, but this difference does
+not matter here). And yes, there are a lot of option combinators helping us to
+work with wrapped value.</p>
+
+<p>Future and Option can be combined in two different ways. The first one is about
+the situation we need some future, but don’t sure if we may get it. E.g. we
+have or haven’t some settings in config file, and depending on the availability
+of this file, we should return a future which reads these settings or return no
+future ‘cause there is nothing to read. Ok, we can encode such a type as
+<code>Option[Future[T]]</code> type and this is not the type I will discuss here. Another
+situation we could have is a future which can return no value. E.g. retrieving
+some record from a database by it’s id. This record can exists or not.
+Regarding this we can obtain the record or not. And the type for such
+computation is <code>Future[Option[T]]</code>. See the difference?</p>
+
+<h2>The Problem</h2>
+
+<p>Well, let’s assume we need to find a record by it’s id and return it or, in the
+event of absence, create a new one. The database API is reactive, all functions
+return results in Future. There is already defined function <code>getPerson</code> which
+return a person wrapped with Some if it exists or None if it doesn&rsquo;t. Let&rsquo;s
+implement it as a function to see what types are used here:</p>
+
+<pre><code class="scala">def getPerson(id: Int): Future[Option[Person]]
+
+def getOrCreate(id: Int, person: =&gt; Person): Future[Person] =
+  getPerson(id).map(_.getOrElse(person))
+</code></pre>
+
+<p>Sometimes there are different strategies to create a record, so we are
+rewriting this to something like</p>
+
+<pre><code class="scala">def getOr(id: Int, builder: =&gt; Future[Person]): Future[Person] = {
+  getPerson(id).flatMap {
+    case None =&gt; builder
+    case Some(person) =&gt; Future(person)
+  }
+}
+</code></pre>
+
+<p>The code is pretty easy and neat, but later we need to do same things with
+other tables/types and we write the boilerplate code over and over again. What
+could we do with this?</p>
+
+<h2>Implicits</h2>
+
+<p>The first solution coming in mind is to use implicits parameterized by record
+type. As a result we get additional methods for all Future[Option[T]]
+instances. Let’s give it a try:</p>
+
+<pre><code class="scala">implicit class FutureOption[T](future: Future[Option[T]]) {
+
+  def getOrElse(default: =&gt; T): Future[T] =
+    future.map(_.getOrElse(default))
+
+  def orElse(default: =&gt; Future[T]): Future[T] =
+    future flatMap {
+      case Some(x) =&gt; Future.successful(x)
+      case None =&gt; default
+    }
+  }
+
+  // or, if you prefer combinator style
+  // def orElse(default: =&gt; Future[T]): Future[T] =
+  //   future.flatMap(_.fold(default)(Future.successful))
+</code></pre>
+
+<p>And it actually works. We don’t need <code>getOrCreate</code> or <code>getOr</code> functions
+anymore.</p>
+
+<pre><code class="scala">getPerson(id).getOrElse(newPerson)
+getPerson(id).orElse(buildPerson)
+</code></pre>
+
+<h2>Monad Transformers</h2>
+
+<p>Ok, no problems here. But could we go a little deeper?</p>
+
+<p>First of all, let&rsquo;s stop and look what we have here. <code>Future[Option[T]]</code> type
+combines two types together. Types like <code>Future</code> or <code>Option</code> are monadic types.
+I don&rsquo;t want to discuss what monad is and what it isn&rsquo;t. Consider it like a
+regular type having methods <code>flatMap</code> and <code>pure</code>. The first method is
+well-known among scala programmers, so I skip the details. The second method is
+just a constructor with one argument. For example, it is <code>Some</code> for <code>Option</code>
+and <code>Future.successful</code> for <code>Future</code>. Wrap the value, nothing more.</p>
+
+<p>Ok, so far so good. When we need to work with Future, we use top level calls,
+when we need to work with Option, we lift it using <code>map</code> or <code>flatMap</code>. See
+example:</p>
+
+<pre><code class="scala">// map Future value
+future.map(f) // f has type Option[A] =&gt; B
+
+// map Option value
+future.map(_.map(f)) // f has type A =&gt; B
+</code></pre>
+
+<p>Exactly as we did before in <code>getOrElse</code> and <code>orElse</code> methods. And this is a
+place for generalization. See, everything we need from <code>Future</code> is
+<code>Future.successful</code> (or <code>pure</code>) and <code>flatMap</code>. We used <code>map</code> as well, but it is
+quite easy to implement it in terms of <code>flatMap</code> and <code>pure</code>:</p>
+
+<pre><code class="scala">def map[B](f: A =&gt; B): F[A] =
+    this.flatMap(x =&gt; implicitly[Monad[F]].pure(f(x)))
+</code></pre>
+
+<p>We say: &ldquo;Monad is a Functor&rdquo;. But who cares? :)</p>
+
+<p>In fact, we may implement functions <code>getOrElse</code> and <code>orElse</code> for any monadic
+type. As generic programmers we have to generalize these functions to support
+all possible types. To get this we need to replace <code>Future[Option[T]]</code> type
+with more generic one:</p>
+
+<pre><code class="scala">class OptionT[F[_], A](val value: F[Option[A]]) {
+
+  def map[B](f: A =&gt; B): OptionT[F, B] =
+    new OptionT(value.map(_.map(f)))
+
+  def flatMap[B](f: A =&gt; OptionT[F, B]): OptionT[F, B] =
+    new OptionT(value.flatMap(_.fold(F.pure(Option.empty[B]))(x =&gt; f(x).value)))
+}
+</code></pre>
+
+<p>This is a monad transformer. We can use Option inside any other monad. But
+unfortunately this code fails for sure at least &lsquo;cause the compiler does not
+aware of <code>value's</code> methods <code>map</code> or <code>flatMap</code>.</p>
+
+<p>Here type classes come for the rescue. A little explanation how they work. We
+define a special trait with methods <code>map</code> or <code>flatMap</code>, these methods accept
+some value with generic type as argument, so concrete implementations of the
+trait will aware of how to handle concrete type. See example:</p>
+
+<pre><code class="scala">trait Monad[F[_]] {
+  def pure[A](x: A): F[A]
+  def map[A, B](m: F[A])(f: A =&gt; B): F[B]
+  def flatMap[A, B](m: F[A])(f: A =&gt; F[B]): F[B]
+}
+
+implicit val futureMonad = new Monad[Future] {
+  def pure[A](x: A): Future[A] = Future.successful(x)
+  def map[A, B](m: Future[A])(f: A =&gt; B): Future[B] = m.map(f)
+  def flatMap[A, B](m: Future[A])(f: A =&gt; Future[B]): Future[B] = m.flatMap(f)
+}
+</code></pre>
+
+<p>Now we can use this monad implicitly to create generic OptionT</p>
+
+<pre><code class="scala">case class OptionT[F[_], A](value: F[Option[A]]) {
+
+  def map[B](f: A =&gt; B)(implicit m: Monad[F]): OptionT[F, B] =
+    OptionT(m.map(value)(_.map(f)))
+
+  def flatMap[B](f: A =&gt; OptionT[F, B])(implicit m: Monad[F]): OptionT[F, B] =
+    OptionT(m.flatMap(value)(_.fold(m.pure(Option.empty[B]))(x =&gt; f(x).value)))
+}
+</code></pre>
+
+<p>What about our functions <code>getOrElse</code> and <code>orElse</code>? Quite simple:</p>
+
+<pre><code class="scala">class OptionT[F[_], A](val value: F[Option[A]]) {
+  ...
+
+  def getOrElse(default: =&gt; A)(implicit m: Monad[F]): F[A] =
+    m.map(value)(_.getOrElse(default))
+
+  def orElse(default: =&gt; F[A])(implicit m: Monad[F]): F[A] =
+    m.flatMap(value)(_.fold(default)(m.pure))
+}
+</code></pre>
+
+<p>Client code looks like:</p>
+
+<pre><code class="scala">OptionT(getPerson(id)).getOrElse(newPerson)
+OptionT(getPerson(id)).orElse(buildPerson)
+</code></pre>
+
+<p>We might use implicits here to convert <code>Future[Option[T]]</code> to
+<code>OptionT[Future, T]</code> implicitly, but we won&rsquo;t.</p>
+
+<h2>Meet Cats</h2>
+
+<p>This section is the shortest one. <a href="http://typelevel.org/cats/">The cats library</a>
+already provides <a href="http://typelevel.org/cats/datatypes/optiont.html">OptionT</a>.
+So it is suffice to import <code>cats.data</code> to use <code>OptionT</code>.</p>
+
+<p><a href="https://github.com/lomeo/futures-examples/">code examples</a></p>
+]]></content>
+  </entry>
+  
+</feed>

@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd" xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 <url>
+<loc>http://lomeo.github.io//blog/2016/11/26/back-to-the-future-part-i/</loc>
+<lastmod>2016-11-26T10:43:10+03:00</lastmod>
+</url>
+<url>
 <loc>http://lomeo.github.io//blog/2016/11/25/hello/</loc>
 <lastmod>2016-11-25T20:05:08+03:00</lastmod>
 </url>
@@ -9,5 +13,20 @@
 </url>
 <url>
 <loc>http://lomeo.github.io//</loc>
+</url>
+<url>
+<loc>http://lomeo.github.io//blog/categories/scala/</loc>
+</url>
+<url>
+<loc>http://lomeo.github.io//blog/categories/future/</loc>
+</url>
+<url>
+<loc>http://lomeo.github.io//blog/categories/option/</loc>
+</url>
+<url>
+<loc>http://lomeo.github.io//blog/categories/monad-transformers/</loc>
+</url>
+<url>
+<loc>http://lomeo.github.io//blog/categories/type-classes/</loc>
 </url>
 </urlset>
