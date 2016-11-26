@@ -4,7 +4,7 @@
   <title><![CDATA[Dmitry Antonyuk's blog]]></title>
   <link href="http://lomeo.github.io//atom.xml" rel="self"/>
   <link href="http://lomeo.github.io//"/>
-  <updated>2016-11-27T02:05:49+03:00</updated>
+  <updated>2016-11-27T02:15:48+03:00</updated>
   <id>http://lomeo.github.io//</id>
   <author>
     <name><![CDATA[Dmitry Antonyuk]]></name>
@@ -208,9 +208,9 @@ unfortunately this code fails for sure at least &lsquo;cause the compiler does n
 aware of <code>value's</code> methods <code>map</code> or <code>flatMap</code>. It is just some type <code>F[A]</code>,
 nothing more, right?</p>
 
-<p>This is the place where type classes come for the rescue. A little explanation
+<p>This is the place where type classes come to the rescue. A little explanation
 how they work. We define a special trait with methods <code>map</code> or <code>flatMap</code>, these
-methods accept some value with generic type as argument, so concrete
+methods accept some value with generic type as an argument, so concrete
 implementations of the trait will aware of how to handle concrete types. See
 example:</p>
 
@@ -301,7 +301,7 @@ example:</p>
 
 <p>This section is the shortest one. <a href="http://typelevel.org/cats/">The cats library</a>
 already provides <a href="http://typelevel.org/cats/datatypes/optiont.html">OptionT</a>.
-So it is suffice to import <code>cats.data</code> to use <code>OptionT</code>.</p>
+So it suffices to import <code>cats.data</code> to use <code>OptionT</code>.</p>
 
 <p><a href="https://github.com/lomeo/futures-examples/">code examples</a></p>
 ]]></content>
